@@ -16,7 +16,7 @@
 Для детектирования домов был выбран линейный признак Хаара, который сравнивает более светлую область изображения (крыша дома) с окружающим ее фоном. Для успешного распознавания зданий были выбраны снимки с горизонтально расположенными домами прямоугольной формы, крыши которых светлее окружающего фона. Для зданий иной формы и иного угла наклона рекомендуется использовать альтернативные характерные признаки Хаара.
 
 ![image](https://user-images.githubusercontent.com/108347547/182026447-3943dafe-d82f-40ce-b811-76f2b6072e99.png)
-> Выбранный признак Хаара.
+*Выбранный признак Хаара.*
 
 #### Считывание изображений
 Функция `read_images` считывает изображение, переводит его в формат полутонов и производит регулировку контрастности (Sigmoid Correction). Обработанные изображения объединяются в список.
@@ -30,4 +30,51 @@ def read_images(path):
         images_list.append((img, img_contrast))
     return images_list
 ```
+#### Использование признака Хаара
+Получение параметров признака Хаара реализуется функцией `get_haar_params`, после чего выбираются размеры окна поиска **X-Y** и размеры классификатора **w-h**. Координаты всех подходящих областей объединяются в список `res_coords`.
 
+Использование признака Хаара представлено следующими фрагментами кода:
+```python
+def get_haar_params(bright_w, dark_w, h):
+    return [[(0, 0), (h, bright_w)], [(0, bright_w), (h, dark_w + bright_w)],
+            [(0, bright_w + dark_w), (h, 4 * bright_w + dark_w)]]
+
+[area1, area2, area3] = get_haar_params(dark_w=1, bright_w=2, h=15)
+square1 = area1[1][0] * (area1[1][1] - area1[0][1])
+square2 = area2[1][0] * (area2[1][1] - area2[0][1])
+square3 = area3[1][0] * (area3[1][1] - area3[0][1])
+
+mean_bright1 = transform.integrate(int_img, (x, y), (x + area1[1][0], y + area1[1][1])) / square1
+mean_dark = transform.integrate(int_img, (x + area2[0][0], y + area2[0][1]),
+                                (x + area2[1][0], y + area2[1][1])) / square2
+mean_bright2 = transform.integrate(int_img, (x + area3[0][0], y + area3[0][1]),
+                                   (x + area3[1][0], y + area3[1][1])) / square3
+
+mean_bright = (mean_bright1 + mean_bright2) / 2
+if mean_bright - mean_dark > w_threshold:
+    res_coords.append((x, y, (window_w, window_h)))
+```
+
+#### Корректировка результатов
+Поскольку окно поиска проходится по всем участкам изображения, объект может быть детектирован сразу несколькими областями. Чтобы избежать повторов, используется функция `remove_close_hits`, которая сравнивает все сохраненные координаты, на которых было обнаружено изображение, и удаляет повторяющиеся, которые находятся слишком близко друг к другу.
+```python
+def remove_close_hits(res_coords):
+    new_coords = sorted(res_coords, key=operator.itemgetter(0))
+    i = 1
+    n = len(new_coords)
+    while i < n:
+        x = new_coords[i][0]
+        y = new_coords[i][1]
+        x1 = new_coords[i - 1][0]
+        y1 = new_coords[i - 1][1]
+        difx = abs(x - x1)
+        dify = abs(y - y1)
+        if (difx + dify) <= 240:
+            del new_coords[i]
+            n -= 1
+        else:
+            i += 1
+    return new_coords
+```
+Без использования данной функции (а также при неправильном выборе пороговых значений) результат был бы следующим:
+![300a527d-4855-43dc-a65e-0890aff41d2e](https://user-images.githubusercontent.com/108347547/182027550-1ea0f88a-57ab-41c3-b768-c84eb7883c88.jpeg)
