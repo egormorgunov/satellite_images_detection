@@ -78,4 +78,5 @@ def remove_close_hits(res_coords):
     return new_coords
 ```
 Без использования данной функции (а также при неправильном выборе пороговых значений) результат был бы следующим:
+
 ![300a527d-4855-43dc-a65e-0890aff41d2e](https://user-images.githubusercontent.com/108347547/182027550-1ea0f88a-57ab-41c3-b768-c84eb7883c88.jpeg)
